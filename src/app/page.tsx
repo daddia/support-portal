@@ -1,103 +1,238 @@
-import Image from "next/image";
+'use client';
+
+import React, { useState, useRef } from 'react';
+import {
+  Box,
+  Typography,
+  Grid,
+  Card,
+  CardContent,
+  CardActionArea,
+  TextField,
+  InputAdornment,
+  IconButton,
+  useMediaQuery,
+  useTheme,
+} from '@mui/material';
+import {
+  HelpOutline,
+  Search,
+  BugReport,
+  Assignment,
+  Search as SearchIcon,
+} from '@mui/icons-material';
+import Link from 'next/link';
+import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/components/common/Toast';
+import { searchService } from '@/services/search';
+import SearchResults from '@/components/search/SearchResults';
+import LoadingState from '@/components/common/LoadingState';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+
+const features = [
+  {
+    title: 'Knowledge Base',
+    description: 'Search through our comprehensive knowledge base for answers to common questions.',
+    icon: <Search sx={{ fontSize: 40 }} />,
+    link: '/knowledge',
+  },
+  {
+    title: 'Report an Issue',
+    description: 'Submit a ticket for technical issues or bugs you encounter.',
+    icon: <BugReport sx={{ fontSize: 40 }} />,
+    link: '/report-issue',
+  },
+  {
+    title: 'Service Requests',
+    description: 'Request new services or modifications to existing ones.',
+    icon: <Assignment sx={{ fontSize: 40 }} />,
+    link: '/service-request',
+  },
+  {
+    title: 'Get Help',
+    description: 'Contact our support team for personalized assistance.',
+    icon: <HelpOutline sx={{ fontSize: 40 }} />,
+    link: '/help',
+  },
+];
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const { user } = useAuth();
+  const { showToast } = useToast();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  // Keyboard shortcuts
+  useKeyboardShortcuts({
+    '/': (event) => {
+      event.preventDefault();
+      searchInputRef.current?.focus();
+    },
+    'escape': () => {
+      setSearchQuery('');
+      setSearchResults([]);
+    },
+  });
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim() || !user?.accessToken) {
+      showToast('Please enter a search term', 'warning');
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const results = await searchService.search(searchQuery, user.accessToken);
+      setSearchResults(results);
+      if (results.length === 0) {
+        showToast('No results found', 'info');
+      }
+    } catch (error) {
+      console.error('Search failed:', error);
+      showToast('Search failed. Please try again.', 'error');
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  return (
+    <Box>
+      {/* Hero Section */}
+      <Box
+        sx={{
+          textAlign: 'center',
+          py: { xs: 4, sm: 8 },
+          mb: 6,
+          background: (theme) =>
+            `linear-gradient(45deg, ${theme.palette.primary.main} 30%, ${theme.palette.primary.light} 90%)`,
+          color: 'white',
+          borderRadius: 2,
+        }}
+      >
+        <Typography
+          variant={isMobile ? 'h2' : 'h1'}
+          component="h1"
+          gutterBottom
+          sx={{ fontSize: { xs: '2rem', sm: '3rem' } }}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          How can we help?
+        </Typography>
+        <Typography
+          variant="h5"
+          sx={{ mb: 4, fontSize: { xs: '1.1rem', sm: '1.5rem' } }}
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          Find answers via Tempster knowledge base
+        </Typography>
+        <Box
+          component="form"
+          onSubmit={handleSearch}
+          sx={{
+            maxWidth: 600,
+            mx: 'auto',
+            px: 2,
+          }}
         >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
+          <TextField
+            inputRef={searchInputRef}
+            fullWidth
+            variant="outlined"
+            placeholder="Tell us what you are looking for... (Press '/' to focus)"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            sx={{
+              bgcolor: 'white',
+              borderRadius: 1,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': {
+                  borderColor: 'transparent',
+                },
+                '&:hover fieldset': {
+                  borderColor: 'transparent',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: 'transparent',
+                },
+              },
+              '& .MuiOutlinedInput-input': {
+                py: 2,
+                fontSize: { xs: '1rem', sm: '1.1rem' },
+              },
+            }}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    type="submit"
+                    disabled={isSearching || !user?.accessToken}
+                    sx={{
+                      color: 'primary.main',
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 82, 204, 0.04)',
+                      },
+                    }}
+                  >
+                    <SearchIcon />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            }}
           />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        </Box>
+      </Box>
+
+      {/* Search Results */}
+      {isSearching ? (
+        <LoadingState showSkeleton={true} skeletonCount={3} />
+      ) : (
+        <SearchResults
+          results={searchResults}
+          isLoading={isSearching}
+          query={searchQuery}
+        />
+      )}
+
+      {/* Features Grid */}
+      <Grid container spacing={4}>
+        {features.map((feature) => (
+          <Grid item xs={12} sm={6} md={3} key={feature.title}>
+            <Card
+              sx={{
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                transition: 'transform 0.2s',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                },
+              }}
+            >
+              <CardActionArea
+                component={Link}
+                href={feature.link}
+                sx={{ flex: 1 }}
+              >
+                <CardContent sx={{ textAlign: 'center' }}>
+                  <Box sx={{ color: 'primary.main', mb: 2 }}>
+                    {feature.icon}
+                  </Box>
+                  <Typography gutterBottom variant="h6" component="h2">
+                    {feature.title}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {feature.description}
+                  </Typography>
+                </CardContent>
+              </CardActionArea>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
   );
 }
